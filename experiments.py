@@ -6,36 +6,43 @@ import torch
 import torch.nn.functional as F
 import torchvision
 from torchvision.transforms import transforms
+from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
 from matplotlib import pyplot as plt
 
-def load_images_from_folder(folder, limit=None):
+def load_transformed_dataset(path, img_size=64, batch_size=128):
 
-    i = 0
-    images = []
-    for filename in os.listdir(folder):
-        img = cv2.imread(os.path.join(folder, filename))
-        if img is not None:
-            images.append(img / 255)
-            i += 1
-        if i == limit:
-            break
+    data_transforms = [
+        transforms.Resize((img_size, img_size)),
+        transforms.ToTensor(),
+        transforms.RandomHorizontalFlip(),
+        transforms.Lambda(lambda x: (x * 2) - 1)  # scales data to [-1, 1]
+    ]
 
-    return images
+    data_transform = transforms.Compose(data_transforms)
 
-def show_images(dataset, num_samples=20, cols=4):
+    ds = ImageFolder(root=path, transform=data_transform)
+    dl = DataLoader(ds, batch_size=batch_size, shuffle=True)
+
+    return dl
+
+
+def show_images(dl, num_samples=20, cols=4):
+
+    for data, y in dl:
+        break
 
     plt.figure(figsize=(15, 15))
-    for i, img in enumerate(dataset):
-        if i == num_samples:
-            break
-        plt.subplot(int(num_samples/cols +1), cols, i + 1)
-        plt.imshow(img)
+    for i in range(num_samples):
+        random_idx = np.random.randint(0, data.shape[0])
+        img = (data[random_idx] + 1) / 2
+        plt.subplot(int(num_samples / cols + 1), cols, i + 1)
+        plt.imshow(img.permute(1, 2, 0))
 
     return
 
-data = load_images_from_folder('data/cars_train') + load_images_from_folder('data/cars_test')
-show_images(data)
+dl = load_transformed_dataset(path='data/cars')
+show_images(dl)
 
 
 #forward process - adding noise / noise scheduler
@@ -86,52 +93,6 @@ sqrt_recip_alphas = torch.sqrt(1.0 / alphas)
 sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)
 sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - alphas_cumprod)
 posterior_variance = betas * (1.0 - alphas_cumprod_prev) / (1.0 - alphas_cumprod)
-
-
-img_size = 64
-batch_size = 128
-
-def load_transformed_dataset(data):
-
-    data_transforms = [
-        transforms.Resize((img_size, img_size)),
-        transforms.RandomHorizontalFlip(),
-        transforms.Lambda(lambda x: (x * 2) - 1)  # scales data to [-1, 1]
-    ]
-
-    data_transform = transforms.Compose(data_transforms)
-
-    random.shuffle(data)
-    data_tmp = []
-    for image in data:
-        image = torch.tensor(image).permute(2, 0, 1)
-        image = data_transform(image)
-        data_tmp.append(image)
-
-    data = torch.stack(data_tmp)
-    print(f'shape: {data.shape}')
-
-    return data
-
-
-def show_images_tensor(dataset, num_samples=20, cols=4):
-    plt.figure(figsize=(15, 15))
-    for i in range(num_samples):
-        random_idx = np.random.randint(0, data.shape[0])
-        img = (data[random_idx] + 1) / 2
-        plt.subplot(int(num_samples / cols + 1), cols, i + 1)
-        plt.imshow(img.permute(1, 2, 0))
-
-    return
-
-data = load_transformed_dataset(data)
-show_images_tensor(data)
-
-
-
-
-
-
 
 
 
