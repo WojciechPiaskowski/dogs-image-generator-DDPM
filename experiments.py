@@ -82,7 +82,7 @@ def forward_diffusion_sample(sqrt_alphas_cumprod, sqrt_one_minus_alphas_cumprod,
 
 
 # beta scheduler
-T = 300
+T = 120
 betas = linear_beta_scheduler(timesteps=T)
 
 # pre-calculate terms, alphas cumulative produts
@@ -93,6 +93,46 @@ sqrt_recip_alphas = torch.sqrt(1.0 / alphas)
 sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)
 sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - alphas_cumprod)
 posterior_variance = betas * (1.0 - alphas_cumprod_prev) / (1.0 - alphas_cumprod)
+
+
+# simulate forward diffusion over single image
+img = next(iter(dl))[0][0]
+img = (img + 1) / 2
+
+plt.figure(figsize=(15, 15))
+plt.axis('off')
+n_images = 10
+step_size = int(T / n_images)
+
+for idx in range(0, T, step_size):
+
+    t = torch.tensor([idx]).type(torch.int64)
+    plt.subplot(1, n_images+1, int((idx/step_size)+1))
+    img, noise = forward_diffusion_sample(sqrt_alphas_cumprod, sqrt_one_minus_alphas_cumprod, img, t)
+    plt.imshow(img.permute(1, 2, 0))
+
+plt.show()
+
+# U-NET - used for backward diffusion
+# convlolutions, down and up sampling, residual connections
+# similar to auto-encoder
+# denoising score matching
+# positional embeddings are used for the step in the sequence information (t)
+# U-Net needs to predict the noise and subtract it from the image (to get image at noise step t-1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
