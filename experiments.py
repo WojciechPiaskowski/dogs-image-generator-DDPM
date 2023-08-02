@@ -16,8 +16,8 @@ from matplotlib import pyplot as plt
 img_size = 64
 batch_size = 128
 
-def load_transformed_dataset(path, img_size=img_size, batch_size=batch_size):
 
+def load_transformed_dataset(path, img_size=img_size, batch_size=batch_size):
     data_transforms = [
         transforms.Resize((img_size, img_size)),
         transforms.ToTensor(),
@@ -28,15 +28,15 @@ def load_transformed_dataset(path, img_size=img_size, batch_size=batch_size):
     data_transform = transforms.Compose(data_transforms)
 
     ds = ImageFolder(root=path, transform=data_transform)
-    dl = DataLoader(ds, batch_size=batch_size, shuffle=True)
+    dl = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=True)
 
     return dl
 
 
-def show_images(dl, num_samples=20, cols=4):
-
-    for data, y in dl:
-        break
+def show_images(dl, num_samples=20, cols=4, gen=False):
+    if gen:
+        for data, y in dl:
+            break
 
     plt.figure(figsize=(15, 15))
     for i in range(num_samples):
@@ -47,15 +47,17 @@ def show_images(dl, num_samples=20, cols=4):
 
     return
 
+
 dl = load_transformed_dataset(path='data/cars')
-# show_images(dl)
 
 
-#forward process - adding noise / noise scheduler
+# show_images(dl, gen=True)
+
+
+# forward process - adding noise / noise scheduler
 
 
 def linear_beta_scheduler(timesteps, start=0.0001, end=0.02):
-
     out = torch.linspace(start, end, timesteps)
 
     return out
@@ -64,24 +66,24 @@ def linear_beta_scheduler(timesteps, start=0.0001, end=0.02):
 # returns an index t of list given the batch dimension
 # TODO: undesrtand what this is used for
 def get_index_from_list(vals, t, x_shape):
-
     batch_size = t.shape[0]
     out = vals.gather(-1, t.cpu())
     out = out.reshape(batch_size, *((1,) * (len(x_shape) - 1))).to(t.device)
 
     return out
 
+
 # TODO: understand what this is used for
 # takes an image and a timestep, retuns noisy image (and noise itself) at that timestep
-def forward_diffusion_sample(x0, t, device=device):
-
+def forward_diffusion_sample(x0, t, device='cuda'):
     noise = torch.randn_like(x0)
     sqrt_alphas_cumprod_t = get_index_from_list(sqrt_alphas_cumprod, t, x0.shape)
     sqrt_one_minus_alphas_cumprod_t = get_index_from_list(sqrt_one_minus_alphas_cumprod, t, x0.shape)
 
+
     # mean + variance
     noisy_img = sqrt_alphas_cumprod_t.to(device) * x0.to(device) \
-          + sqrt_one_minus_alphas_cumprod_t.to(device) * noise.to(device)
+                + sqrt_one_minus_alphas_cumprod_t.to(device) * noise.to(device)
     noise = noise.to(device)
 
     return noisy_img, noise
@@ -100,7 +102,6 @@ sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)
 sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - alphas_cumprod)
 posterior_variance = betas * (1.0 - alphas_cumprod_prev) / (1.0 - alphas_cumprod)
 
-
 # simulate forward diffusion over single image
 img = next(iter(dl))[0][0]
 img = (img + 1) / 2
@@ -109,6 +110,7 @@ plt.figure(figsize=(15, 15))
 plt.axis('off')
 n_images = 10
 step_size = int(T / n_images)
+
 
 # for idx in range(0, T, step_size):
 #
@@ -134,7 +136,7 @@ class Block(nn.Module):
         super().__init__()
         self.time_mlp = nn.Linear(time_emb_dim, out_ch)
         if up:
-            self.conv1 = nn.Conv2d(2*in_ch, out_ch, 3, padding=1)
+            self.conv1 = nn.Conv2d(2 * in_ch, out_ch, 3, padding=1)
             self.transform = nn.ConvTranspose2d(out_ch, out_ch, 4, 2, 1)
         else:
             self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1)
@@ -159,7 +161,6 @@ class Block(nn.Module):
         return self.transform(h)
 
 
-
 class SinusoidalPositionEmbeddings(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -174,10 +175,6 @@ class SinusoidalPositionEmbeddings(nn.Module):
         embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
         # TODO: Double check the ordering here
         return embeddings
-
-
-
-
 
 
 class SimpleUnet(nn.Module):
@@ -237,8 +234,8 @@ model = SimpleUnet()
 print("Num params: ", sum(p.numel() for p in model.parameters()))
 model
 
-def get_loss(model, x0, t):
 
+def get_loss(model, x0, t):
     x_noisy, noise = forward_diffusion_sample(x0, t)
     noise_pred = model(x_noisy, t)
 
@@ -250,7 +247,6 @@ def get_loss(model, x0, t):
 # applies noise to this image, if not in the last step
 @torch.no_grad()
 def sample_timestep(x, t):
-
     betas_t = get_index_from_list(betas, t, x.shape)
     sqrt_one_minus_alphas_cumprod_t = get_index_from_list(sqrt_one_minus_alphas_cumprod, t, x.shape)
     sqrt_recip_alphas_t = get_index_from_list(sqrt_recip_alphas, t, x.shape)
@@ -268,21 +264,21 @@ def sample_timestep(x, t):
 
 @torch.no_grad()
 def sample_plot_image(img_size, device, idx):
-
     # sample noise
     img = torch.randn((1, 3, img_size, img_size), device=device)
     plt.figure(figsize=(15, 15))
     plt.axis('off')
     n_images = 10
-    step = int(T/n_images)
+    step = int(T / n_images)
 
     for i in range(0, T)[::-1]:
         t = torch.full((1,), i, device=device, dtype=torch.long)
         img = sample_timestep(img, t)
         if i % step == 0:
-            plt.subplot(1, n_images, int(i/step+1))
-            show_images(img.detach().cpu())
+            plt.subplot(1, n_images, int(i / step + 1))
+            # show_images(img.detach().cpu())
     plt.savefig(f'samples/img{idx}.png')
+
 
 device = 'cuda'
 model.to(device)
@@ -299,7 +295,6 @@ for epoch in range(epochs):
         loss.backward()
         opt.step()
 
-        if epoch % 5 == 0 and step == 0:
+        if epoch % 1 == 0 and step == 0:
             print(f'epoch: {epoch}, step: {step}, loss: {loss.item()}')
             sample_plot_image(img_size, device, epoch)
-
