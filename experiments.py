@@ -1,13 +1,10 @@
-import cv2
-import os
-import random
 import math
+import time
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import Adam
-import torchvision
 from torchvision.transforms import transforms
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
@@ -33,29 +30,33 @@ def load_transformed_dataset(path, img_size=img_size, batch_size=batch_size):
     return dl
 
 
-def show_images(dl, num_samples=20, cols=4, gen=False):
-    if gen:
-        for data, y in dl:
-            break
+def show_images(dl, num_samples=20, cols=4, display=False, save=False, title=''):
+
+    if not display:
+        plt.ioff()
+
+    for data, y in dl:
+        break
 
     plt.figure(figsize=(15, 15))
     for i in range(num_samples):
         random_idx = np.random.randint(0, data.shape[0])
         img = (data[random_idx] + 1) / 2
         plt.subplot(int(num_samples / cols + 1), cols, i + 1)
-        # plt.imshow(img.permute(1, 2, 0))
+        plt.imshow(img.permute(1, 2, 0))
+
+    if save:
+        plt.savefig(f'samples/{title}.png')
+
+    plt.ion()
 
     return
 
-
 dl = load_transformed_dataset(path='data/cars')
-
-
-# show_images(dl, gen=True)
+# show_images(dl, display=True, save=False, title='sample_images')
 
 
 # forward process - adding noise / noise scheduler
-
 
 def linear_beta_scheduler(timesteps, start=0.0001, end=0.02):
     out = torch.linspace(start, end, timesteps)
@@ -68,7 +69,7 @@ def linear_beta_scheduler(timesteps, start=0.0001, end=0.02):
 def get_index_from_list(vals, t, x_shape):
     batch_size = t.shape[0]
     out = vals.gather(-1, t.cpu())
-    out = out.reshape(batch_size, *((1,) * (len(x_shape) - 1))).to(t.device)
+    out = out.reshape(batch_size, *((1,) * (len(x_shape) - 1))).to('cuda')
 
     return out
 
@@ -103,24 +104,29 @@ sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - alphas_cumprod)
 posterior_variance = betas * (1.0 - alphas_cumprod_prev) / (1.0 - alphas_cumprod)
 
 # simulate forward diffusion over single image
-img = next(iter(dl))[0][0]
-img = (img + 1) / 2
+def display_forward_diffusion():
 
-plt.figure(figsize=(15, 15))
-plt.axis('off')
-n_images = 10
-step_size = int(T / n_images)
+    img = next(iter(dl))[0][0]
+    img = (img + 1) / 2
 
+    plt.figure(figsize=(15, 15))
+    plt.axis('off')
+    n_images = 10
+    step_size = int(T / n_images)
 
-# for idx in range(0, T, step_size):
-#
-#     t = torch.tensor([idx]).type(torch.int64)
-#     plt.subplot(1, n_images+1, int((idx/step_size)+1))
-#     img, noise = forward_diffusion_sample(img, t)
-#     img = img.cpu()
-#     plt.imshow(img.permute(1, 2, 0))
-#
-# plt.show()
+    for idx in range(0, T, step_size):
+
+        t = torch.tensor([idx]).type(torch.int64)
+        plt.subplot(1, n_images+1, int((idx/step_size)+1))
+        img, noise = forward_diffusion_sample(img, t)
+        img = img.cpu()
+        plt.imshow(img.permute(1, 2, 0))
+
+    plt.show()
+
+    return
+
+# display_forward_diffusion()
 
 # U-NET - used for backward diffusion
 # convlolutions, down and up sampling, residual connections
@@ -232,7 +238,7 @@ class SimpleUnet(nn.Module):
 
 model = SimpleUnet()
 print("Num params: ", sum(p.numel() for p in model.parameters()))
-model
+model.to('cuda')
 
 
 def get_loss(model, x0, t):
@@ -263,29 +269,44 @@ def sample_timestep(x, t):
 
 
 @torch.no_grad()
-def sample_plot_image(img_size, device, idx):
+def sample_plot_image(img_size, device, epoch):
+
+    # disable displaying of plots
+    plt.ioff()
+
     # sample noise
     img = torch.randn((1, 3, img_size, img_size), device=device)
     plt.figure(figsize=(15, 15))
     plt.axis('off')
-    n_images = 10
+    n_images = 20
     step = int(T / n_images)
 
+    idx = 1
     for i in range(0, T)[::-1]:
+
         t = torch.full((1,), i, device=device, dtype=torch.long)
         img = sample_timestep(img, t)
+
+
+        img = torch.clamp(img, 0.0, 1.0)
         if i % step == 0:
-            plt.subplot(1, n_images, int(i / step + 1))
-            # show_images(img.detach().cpu())
-    plt.savefig(f'samples/img{idx}.png')
+            plt.subplot(2, int(n_images/2), idx)
+            plt.imshow(img.detach().cpu()[0].permute(1, 2, 0))
+            idx += 1
+
+    plt.savefig(f'samples/epoch_{epoch}.png')
+    plt.ion()
+
+    return
 
 
 device = 'cuda'
 model.to(device)
 opt = Adam(model.parameters(), lr=0.001)
-epochs = 5
+epochs = 3
 
 for epoch in range(epochs):
+    start = time.time()
     for step, batch in enumerate(dl):
 
         opt.zero_grad()
@@ -295,6 +316,7 @@ for epoch in range(epochs):
         loss.backward()
         opt.step()
 
-        if epoch % 1 == 0 and step == 0:
-            print(f'epoch: {epoch}, step: {step}, loss: {loss.item()}')
-            sample_plot_image(img_size, device, epoch)
+    elapsed = time.time() - start
+    print(f'epoch: {epoch}, step: {step}, loss: {loss.item():.4f}'
+          f' time: {elapsed/60:.1f} minutes')
+    sample_plot_image(img_size, device, epoch)
