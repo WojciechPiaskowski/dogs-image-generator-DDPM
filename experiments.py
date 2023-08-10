@@ -119,6 +119,7 @@ def display_forward_diffusion():
         t = torch.tensor([idx]).type(torch.int64)
         plt.subplot(1, n_images+1, int((idx/step_size)+1))
         img, noise = forward_diffusion_sample(img, t)
+        img = torch.clamp(img, -1.0, 1.0)
         img = img.cpu()
         plt.imshow(img.permute(1, 2, 0))
 
@@ -243,6 +244,7 @@ model.to('cuda')
 
 def get_loss(model, x0, t):
     x_noisy, noise = forward_diffusion_sample(x0, t)
+    x_noisy = torch.clamp(x_noisy, -1.0, 1.0)
     noise_pred = model(x_noisy, t)
 
     # TODO check L1 loss
@@ -288,24 +290,30 @@ def sample_plot_image(img_size, device, epoch):
         img = sample_timestep(img, t)
 
 
-        img = torch.clamp(img, 0.0, 1.0)
+        img = torch.clamp(img, -1.0, 1.0)
         if i % step == 0:
             plt.subplot(2, int(n_images/2), idx)
             plt.imshow(img.detach().cpu()[0].permute(1, 2, 0))
             idx += 1
 
     plt.savefig(f'samples/epoch_{epoch}.png')
+    plt.close('all')
     plt.ion()
 
     return
 
 
+model.load_state_dict(torch.load('model_state.pth'))
+with open('epoch.txt', 'r') as f:
+    content = f.read()
+epoch_min_range = int(content)
+
 device = 'cuda'
 model.to(device)
 opt = Adam(model.parameters(), lr=0.001)
-epochs = 3
+epochs = 100
 
-for epoch in range(epochs):
+for epoch in range(epoch_min_range, epoch_min_range+epochs):
     start = time.time()
     for step, batch in enumerate(dl):
 
@@ -320,3 +328,9 @@ for epoch in range(epochs):
     print(f'epoch: {epoch}, step: {step}, loss: {loss.item():.4f}'
           f' time: {elapsed/60:.1f} minutes')
     sample_plot_image(img_size, device, epoch)
+
+
+torch.save(model.state_dict(), 'model_state.pth')
+
+with open('epoch.txt', 'w') as f:
+    f.write(str(epoch))
