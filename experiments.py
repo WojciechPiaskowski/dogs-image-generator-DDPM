@@ -6,9 +6,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import Adam
 from torchvision.transforms import transforms
+from torchvision.transforms.functional import adjust_brightness
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
 from matplotlib import pyplot as plt
+from PIL import Image
+
 
 img_size = 64
 batch_size = 128
@@ -91,7 +94,7 @@ def forward_diffusion_sample(x0, t, device='cuda'):
 
 
 # beta scheduler
-T = 120
+T = 300
 betas = linear_beta_scheduler(timesteps=T)
 
 # pre-calculate terms, alphas cumulative produts
@@ -104,7 +107,7 @@ sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - alphas_cumprod)
 posterior_variance = betas * (1.0 - alphas_cumprod_prev) / (1.0 - alphas_cumprod)
 
 # simulate forward diffusion over single image
-def display_forward_diffusion():
+def display_forward_diffusion(device='cuda'):
 
     img = next(iter(dl))[0][0]
     img = (img + 1) / 2
@@ -118,7 +121,7 @@ def display_forward_diffusion():
 
         t = torch.tensor([idx]).type(torch.int64)
         plt.subplot(1, n_images+1, int((idx/step_size)+1))
-        img, noise = forward_diffusion_sample(img, t)
+        img, noise = forward_diffusion_sample(img, t, device)
         img = torch.clamp(img, -1.0, 1.0)
         img = img.cpu()
         plt.imshow(img.permute(1, 2, 0))
@@ -128,6 +131,7 @@ def display_forward_diffusion():
     return
 
 # display_forward_diffusion()
+
 
 # U-NET - used for backward diffusion
 # convlolutions, down and up sampling, residual connections
@@ -236,14 +240,8 @@ class SimpleUnet(nn.Module):
             x = up(x, t)
         return self.output(x)
 
-
-model = SimpleUnet()
-print("Num params: ", sum(p.numel() for p in model.parameters()))
-model.to('cuda')
-
-
-def get_loss(model, x0, t):
-    x_noisy, noise = forward_diffusion_sample(x0, t)
+def get_loss(model, x0, t, device='cuda'):
+    x_noisy, noise = forward_diffusion_sample(x0, t, device)
     x_noisy = torch.clamp(x_noisy, -1.0, 1.0)
     noise_pred = model(x_noisy, t)
 
@@ -289,11 +287,15 @@ def sample_plot_image(img_size, device, epoch):
         t = torch.full((1,), i, device=device, dtype=torch.long)
         img = sample_timestep(img, t)
 
-
         img = torch.clamp(img, -1.0, 1.0)
         if i % step == 0:
             plt.subplot(2, int(n_images/2), idx)
-            plt.imshow(img.detach().cpu()[0].permute(1, 2, 0))
+            img_show = img.detach().cpu()
+            img_show = (img_show + 1) / 2
+            img_show = img_show[0].permute(1, 2, 0)
+            img_show = img_show * 255
+            img_show = img_show.numpy().astype(np.uint8)
+            plt.imshow(img_show)
             idx += 1
 
     plt.savefig(f'samples/epoch_{epoch}.png')
@@ -302,14 +304,17 @@ def sample_plot_image(img_size, device, epoch):
 
     return
 
+device = 'cuda:0'
+model = SimpleUnet()
+print("Num params: ", sum(p.numel() for p in model.parameters()))
+model.to(device)
+
 
 model.load_state_dict(torch.load('model_state.pth'))
 with open('epoch.txt', 'r') as f:
     content = f.read()
 epoch_min_range = int(content)
 
-device = 'cuda'
-model.to(device)
 opt = Adam(model.parameters(), lr=0.001)
 epochs = 100
 
@@ -320,7 +325,7 @@ for epoch in range(epoch_min_range, epoch_min_range+epochs):
         opt.zero_grad()
 
         t = torch.randint(0, T, (batch_size,), device=device).long()
-        loss = get_loss(model, batch[0], t)
+        loss = get_loss(model, batch[0], t, device)
         loss.backward()
         opt.step()
 
@@ -329,8 +334,68 @@ for epoch in range(epoch_min_range, epoch_min_range+epochs):
           f' time: {elapsed/60:.1f} minutes')
     sample_plot_image(img_size, device, epoch)
 
+    if epoch % 10 == 0:
+        torch.save(model.state_dict(), 'model_state.pth')
+        with open('epoch.txt', 'w') as f:
+            f.write(str(epoch))
 
-torch.save(model.state_dict(), 'model_state.pth')
 
-with open('epoch.txt', 'w') as f:
-    f.write(str(epoch))
+
+
+
+
+
+
+#
+# sample noise
+img = torch.randn((1, 3, img_size, img_size), device=device)
+plt.figure(figsize=(15, 15))
+plt.axis('off')
+n_images = 20
+step = int(T / n_images)
+
+idx = 1
+for i in range(0, T)[::-1]:
+
+    t = torch.full((1,), i, device=device, dtype=torch.long)
+    img = sample_timestep(img, t)
+
+    # img = (img + 1) / 2
+    img = torch.clamp(img, -1.0, 1.0)
+
+    if i % step == 0:
+        plt.subplot(2, int(n_images/2), idx)
+
+        plt.subplot(2, int(n_images / 2), idx)
+        img_show = img.detach().cpu()
+        img_show = (img_show + 1) / 2
+        img_show = img_show[0].permute(1, 2, 0)
+        img_show = img_show * 255
+        img_show = img_show.numpy().astype(np.uint8)
+        plt.imshow(img_show)
+        idx += 1
+
+
+img = img.detach().cpu()
+img = (img + 1) / 2
+img = img[0].permute(1, 2, 0)
+img = img * 255
+img = img.numpy().astype(np.uint8)
+plt.imshow(img)
+
+# img2 = img[0].permute(1, 2, 0).cpu().numpy()
+# img2 = (img2 * 255).astype(np.uint8)
+# img_show = Image.fromarray(img2, 'RGB')
+# img_show.show()
+
+
+
+
+
+
+#
+#
+#
+# img2 = torch.clamp(img, 0.0, 1.0)
+# plt.imshow(img2.detach().cpu()[0].permute(1, 2, 0))
+
