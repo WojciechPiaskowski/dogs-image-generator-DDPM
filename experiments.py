@@ -345,43 +345,43 @@ for epoch in range(epoch_min_range, epoch_min_range+epochs):
 
 
 
-
 #
-# sample noise
-img = torch.randn((1, 3, img_size, img_size), device=device)
-plt.figure(figsize=(15, 15))
-plt.axis('off')
-n_images = 20
-step = int(T / n_images)
-
-idx = 1
-for i in range(0, T)[::-1]:
-
-    t = torch.full((1,), i, device=device, dtype=torch.long)
-    img = sample_timestep(img, t)
-
-    # img = (img + 1) / 2
-    img = torch.clamp(img, -1.0, 1.0)
-
-    if i % step == 0:
-        plt.subplot(2, int(n_images/2), idx)
-
-        plt.subplot(2, int(n_images / 2), idx)
-        img_show = img.detach().cpu()
-        img_show = (img_show + 1) / 2
-        img_show = img_show[0].permute(1, 2, 0)
-        img_show = img_show * 255
-        img_show = img_show.numpy().astype(np.uint8)
-        plt.imshow(img_show)
-        idx += 1
-
-
-img = img.detach().cpu()
-img = (img + 1) / 2
-img = img[0].permute(1, 2, 0)
-img = img * 255
-img = img.numpy().astype(np.uint8)
-plt.imshow(img)
+# #
+# # sample noise
+# img = torch.randn((1, 3, img_size, img_size), device=device)
+# plt.figure(figsize=(15, 15))
+# plt.axis('off')
+# n_images = 20
+# step = int(T / n_images)
+#
+# idx = 1
+# for i in range(0, T)[::-1]:
+#
+#     t = torch.full((1,), i, device=device, dtype=torch.long)
+#     img = sample_timestep(img, t)
+#
+#     # img = (img + 1) / 2
+#     img = torch.clamp(img, -1.0, 1.0)
+#
+#     if i % step == 0:
+#         plt.subplot(2, int(n_images/2), idx)
+#
+#         plt.subplot(2, int(n_images / 2), idx)
+#         img_show = img.detach().cpu()
+#         img_show = (img_show + 1) / 2
+#         img_show = img_show[0].permute(1, 2, 0)
+#         img_show = img_show * 255
+#         img_show = img_show.numpy().astype(np.uint8)
+#         plt.imshow(img_show)
+#         idx += 1
+#
+#
+# img = img.detach().cpu()
+# img = (img + 1) / 2
+# img = img[0].permute(1, 2, 0)
+# img = img * 255
+# img = img.numpy().astype(np.uint8)
+# plt.imshow(img)
 
 # img2 = img[0].permute(1, 2, 0).cpu().numpy()
 # img2 = (img2 * 255).astype(np.uint8)
