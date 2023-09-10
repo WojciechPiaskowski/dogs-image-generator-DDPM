@@ -1,3 +1,4 @@
+# imports
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -8,39 +9,71 @@ import time
 import os
 import pandas as pd
 
-def load_create_status():
+# def timeout(seconds, action=None):
+#     """Calls any function with timeout after 'seconds'.
+#        If a timeout occurs, 'action' will be returned or called if
+#        it is a function-like object.
+#     """
+#     def handler(queue, func, args, kwargs):
+#         queue.put(func(*args, **kwargs))
+#
+#     def decorator(func):
+#
+#         def wraps(*args, **kwargs):
+#             q = Queue()
+#             p = Process(target=handler, args=(q, func, args, kwargs))
+#             p.start()
+#             p.join(timeout=seconds)
+#             if p.is_alive():
+#                 p.terminate()
+#                 p.join()
+#                 if hasattr(action, '__call__'):
+#                     return action()
+#                 else:
+#                     return action
+#             else:
+#                 return q.get()
+#
+#         return wraps
+#
+#     return decorator
 
+
+
+# function to create or load (if exists) df with download status
+def load_create_status():
     try:
         df = pd.read_csv(os.getcwd() + '\\data\\download_status.csv')
 
     except:
 
         breeds = [
-        'french bulldogs',
-        'labrador retrievers',
-        'golden retrievers',
-        'german shepherd',
-        'poodles',
-        'bulldogs',
-        'rottweilers',
-        'beagles',
-        'dachshunds',
-        'german shorthaired pointers',
-        'pembroke welsh corgis',
-        'australian shepherds',
-        'yorkshire terriers',
-        'cavalier king charles spaniels',
-        'doberman pinschers',
-        'boxers',
-        'miniature schnauzers',
-        'cane corso',
-        'great danes',
-        'shih tzu',
-        'siberian huskies',
-        'bernese mountain dogs',
-        'pomeranians',
-        'boston terriers',
-        'havanese']
+            'jack russel terrier',
+            'french bulldogs',
+            'labrador retrievers',
+            'golden retrievers',
+            'german shepherd',
+            'poodles',
+            'bulldogs',
+            'rottweilers',
+            'beagles',
+            'dachshunds',
+            'german shorthaired pointers',
+            'pembroke welsh corgis',
+            'australian shepherds',
+            'yorkshire terriers',
+            'cavalier king charles spaniels',
+            'doberman pinschers',
+            'boxers',
+            'miniature schnauzers',
+            'cane corso',
+            'great danes',
+            'shih tzu',
+            'siberian huskies',
+            'bernese mountain dogs',
+            'pomeranians',
+            'boston terriers',
+            'havanese']
 
         breeds = [breed + ' dog pictures' for breed in breeds]
         d = {'breed': breeds}
@@ -50,16 +83,13 @@ def load_create_status():
 
     return df
 
+
+# function that scrolls to bottom of image search, clicking on 'show more results' if needed
 def scroll_to_bottom(wd):
-    last_height = wd.execute_script('\
-    return document.body.scrollHeight')
+    last_height = wd.execute_script('return document.body.scrollHeight')
 
     while True:
-        wd.execute_script('\
-        window.scrollTo(0,document.body.scrollHeight)')
-
-        # waiting for the results to load
-        # Increase the sleep time if your internet is slow
+        wd.execute_script('window.scrollTo(0,document.body.scrollHeight)')
         time.sleep(1)
 
         new_height = wd.execute_script('\
@@ -68,9 +98,6 @@ def scroll_to_bottom(wd):
         # click on "Show more results" (if exists)
         try:
             wd.find_elements(By.CLASS_NAME, 'LZ4I')[0].click()
-
-            # waiting for the results to load
-            # Increase the sleep time if your internet is slow
             time.sleep(1)
 
         except:
@@ -84,8 +111,9 @@ def scroll_to_bottom(wd):
 
     return
 
-def get_google_images(delay, search_label):
 
+# look for images and get image links
+def get_google_images(delay, search_label):
     wd = webdriver.Chrome()
     wd.get('https://www.google.com/imghp?hl=en')
 
@@ -126,12 +154,13 @@ def get_google_images(delay, search_label):
 
     return image_urls
 
-def download_image(path, url, file_name):
 
+# @timeout(60)
+def download_image(path, url, file_name):
     wd = webdriver.Chrome()
 
     try:
-        image_content = requests.get(url).content
+        image_content = requests.get(url, timeout=60).content
         image_file = io.BytesIO(image_content)
         image = Image.open(image_file)
 
@@ -162,15 +191,14 @@ for breed in search_labels:
 
     st_global = time.time()
     for i, url in enumerate(urls):
-
         st_local = time.time()
-        download_image(path, url, f'{breed}_{i}')
-        print(f'downloaded image #{i} in {time.time() - st_local:.1f} s, total time {(time.time() - st_global) / 60:.2f} min')
+        download_image(path, url, f'{breed.replace(" ", "_")}_{i}')
 
-    df[df['breed'] == breed]['downloaded'] = 1
+        print(
+            f'downloaded image #{i} in {time.time() - st_local:.1f} s, total time {(time.time() - st_global) / 60:.2f} min')
+
+    df.iloc[df[df['breed'] == breed].index, 1] = 1
     df.to_csv(os.getcwd() + '\\data\\download_status.csv', index=False)
-
-
 
 
 
