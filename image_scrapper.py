@@ -180,10 +180,14 @@ def download_image(path, url, file_name):
 df = load_create_status()
 search_labels = list(df[df['downloaded'] == 0]['breed'])
 
-# setup arguments
-path = os.getcwd() + '\\data\\dogs\\'
 
 for breed in search_labels:
+
+    # setup path
+    path = os.getcwd() + f'\\data\\dogs\\{breed.replace(" ", "_")}\\'
+    path_exist = os.path.exists(path)
+    if not path_exist:
+        os.makedirs(path)
 
     st = time.time()
     urls = get_google_images(delay=1, search_label=breed)
