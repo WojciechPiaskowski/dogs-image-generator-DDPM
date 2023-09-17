@@ -11,10 +11,22 @@ from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
 from matplotlib import pyplot as plt
 from PIL import Image
+import os
 
 
 img_size = 64
 batch_size = 128
+
+# remove corrupted image files
+rt_path = f'{os.getcwd()}\\data\\dogs'
+for subdir, dirs, files in os.walk(rt_path):
+    for file in files:
+        path = os.path.join(subdir, file)
+
+        try:
+            img = Image.open(path)
+        except:
+            os.remove(path)
 
 
 def load_transformed_dataset(path, img_size=img_size, batch_size=batch_size):
@@ -319,27 +331,36 @@ print("Num params: ", sum(p.numel() for p in model.parameters()))
 model.to(device)
 
 # add if exists
-model.load_state_dict(torch.load('model_state.pth'))
-with open('epoch.txt', 'r') as f:
-    content = f.read()
-epoch_min_range = int(content)
+path_exist = os.path.exists(f"{os.getcwd()}\\model_state.pth")
+if path_exist:
+    model.load_state_dict(torch.load('model_state.pth'))
+
+path_exist = os.path.exists(f"{os.getcwd()}\\epoch.txt")
+if path_exist:
+    with open('epoch.txt', 'r') as f:
+        content = f.read()
+    epoch_min_range = int(content)
+else:
+    epoch_min_range = 0
 
 opt = Adam(model.parameters(), lr=0.001)
 epochs = 100
 
 for epoch in range(epoch_min_range, epoch_min_range+epochs):
     start = time.time()
-    for step, batch in enumerate(dl):
+    # for step, batch in enumerate(dl):
+    for batch_x, batch_y in dl:
 
         opt.zero_grad()
 
         t = torch.randint(0, T, (batch_size,), device=device).long()
-        loss = get_loss(model, batch[0], t, device)
+        # loss = get_loss(model, batch[0], t, device)
+        loss = get_loss(model, batch_x, t, device)
         loss.backward()
         opt.step()
 
     elapsed = time.time() - start
-    print(f'epoch: {epoch}, step: {step}, loss: {loss.item():.4f}'
+    print(f'epoch: {epoch}, loss: {loss.item():.4f}'
           f' time: {elapsed/60:.1f} minutes')
     sample_plot_image(img_size, device, epoch)
 
@@ -347,6 +368,11 @@ for epoch in range(epoch_min_range, epoch_min_range+epochs):
         torch.save(model.state_dict(), 'model_state.pth')
         with open('epoch.txt', 'w') as f:
             f.write(str(epoch))
+
+
+
+
+
 
 
 
