@@ -116,7 +116,8 @@ def forward_diffusion_sample(x0, t, device='cuda'):
 
 # beta scheduler
 T = 300
-betas = linear_beta_schedule(timesteps=T)
+# betas = linear_beta_schedule(timesteps=T)
+betas = cosine_beta_schedule(timesteps=T)
 
 # pre-calculate terms, alphas cumulative produts
 alphas = 1.0 - betas
@@ -343,10 +344,11 @@ if path_exist:
 else:
     epoch_min_range = 0
 
-opt = Adam(model.parameters(), lr=0.001)
-epochs = 100
+opt = Adam(model.parameters(), lr=0.0001)
+epochs = 500
 
 for epoch in range(epoch_min_range, epoch_min_range+epochs):
+    losses = np.zeros(0)
     start = time.time()
     # for step, batch in enumerate(dl):
     for batch_x, batch_y in dl:
@@ -359,8 +361,11 @@ for epoch in range(epoch_min_range, epoch_min_range+epochs):
         loss.backward()
         opt.step()
 
+        with torch.no_grad():
+            losses = np.append(losses, loss.cpu().numpy())
+
     elapsed = time.time() - start
-    print(f'epoch: {epoch}, loss: {loss.item():.4f}'
+    print(f'epoch: {epoch}, loss: {np.mean(losses):.4f}'
           f' time: {elapsed/60:.1f} minutes')
     sample_plot_image(img_size, device, epoch)
 
