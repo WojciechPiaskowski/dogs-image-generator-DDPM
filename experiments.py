@@ -15,7 +15,7 @@ import os
 
 
 img_size = 64
-batch_size = 128
+batch_size = 64
 
 # remove corrupted image files
 rt_path = f'{os.getcwd()}\\data\\dogs'
@@ -115,7 +115,7 @@ def forward_diffusion_sample(x0, t, device='cuda'):
 
 
 # beta scheduler
-T = 300
+T = 1000
 # betas = linear_beta_schedule(timesteps=T)
 betas = cosine_beta_schedule(timesteps=T)
 
@@ -221,17 +221,22 @@ class SimpleUnet(nn.Module):
         down_channels = (64, 128, 256, 512, 1024)
         up_channels = (1024, 512, 256, 128, 64)
         out_dim = 3
-        time_emb_dim = 32
+        time_emb_dim = 64
 
         # Time embedding
         self.time_mlp = nn.Sequential(
             SinusoidalPositionEmbeddings(time_emb_dim),
+            nn.SiLU(),
             nn.Linear(time_emb_dim, time_emb_dim),
-            nn.ReLU()
+            # nn.ReLU()
         )
 
         # Initial projection
         self.conv0 = nn.Conv2d(image_channels, down_channels[0], 3, padding=1)
+
+
+        # middle blocks
+        self.middle = nn.Conv2d(down_channels[-1], down_channels[-1], 3, padding=1)
 
         # Downsample
         self.downs = nn.ModuleList([Block(down_channels[i], down_channels[i + 1], \
@@ -242,7 +247,6 @@ class SimpleUnet(nn.Module):
                                         time_emb_dim, up=True) \
                                   for i in range(len(up_channels) - 1)])
 
-        # Edit: Corrected a bug found by Jakub C (see YouTube comment)
         self.output = nn.Conv2d(up_channels[-1], out_dim, 1)
 
     def forward(self, x, timestep):
@@ -255,6 +259,10 @@ class SimpleUnet(nn.Module):
         for down in self.downs:
             x = down(x, t)
             residual_inputs.append(x)
+
+        x = self.middle(x)
+        x = self.middle(x)
+
         for up in self.ups:
             residual_x = residual_inputs.pop()
             # Add residual x as additional channels
@@ -329,6 +337,7 @@ def sample_plot_image(img_size, device, epoch):
 device = 'cuda:0'
 model = SimpleUnet()
 print("Num params: ", sum(p.numel() for p in model.parameters()))
+print(model)
 model.to(device)
 
 # add if exists
@@ -344,8 +353,8 @@ if path_exist:
 else:
     epoch_min_range = 0
 
-opt = Adam(model.parameters(), lr=0.0001)
-epochs = 500
+opt = Adam(model.parameters(), lr=0.000003)
+epochs = 1000
 
 for epoch in range(epoch_min_range, epoch_min_range+epochs):
     losses = np.zeros(0)
