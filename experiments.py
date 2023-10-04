@@ -15,7 +15,7 @@ import os
 
 
 img_size = 64
-batch_size = 64
+batch_size = 32
 
 # remove corrupted image files
 rt_path = f'{os.getcwd()}\\data\\dogs'
@@ -115,7 +115,7 @@ def forward_diffusion_sample(x0, t, device='cuda'):
 
 
 # beta scheduler
-T = 1000
+T = 4000
 # betas = linear_beta_schedule(timesteps=T)
 betas = cosine_beta_schedule(timesteps=T)
 
@@ -315,7 +315,7 @@ def sample_plot_image(img_size, device, epoch):
     for i in range(0, T)[::-1]:
 
         t = torch.full((1,), i, device=device, dtype=torch.long)
-        img = sample_timestep(img, t)
+        img = sample_timestep(img, t) 
 
         img = torch.clamp(img, -1.0, 1.0)
         if i % step == 0:
@@ -353,7 +353,7 @@ if path_exist:
 else:
     epoch_min_range = 0
 
-opt = Adam(model.parameters(), lr=0.000003)
+opt = Adam(model.parameters(), lr=0.0001)
 epochs = 1000
 
 for epoch in range(epoch_min_range, epoch_min_range+epochs):
@@ -373,18 +373,20 @@ for epoch in range(epoch_min_range, epoch_min_range+epochs):
         with torch.no_grad():
             losses = np.append(losses, loss.cpu().numpy())
 
+
     elapsed = time.time() - start
     print(f'epoch: {epoch}, loss: {np.mean(losses):.4f}'
           f' time: {elapsed/60:.1f} minutes')
-    sample_plot_image(img_size, device, epoch)
 
     if epoch % 10 == 0:
         torch.save(model.state_dict(), 'model_state.pth')
         with open('epoch.txt', 'w') as f:
             f.write(str(epoch))
 
+        sample_plot_image(img_size, device, epoch)
 
 
+# 1880
 
 
 
