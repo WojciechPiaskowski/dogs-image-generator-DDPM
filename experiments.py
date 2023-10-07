@@ -15,7 +15,7 @@ import os
 
 
 img_size = 64
-batch_size = 32
+batch_size = 16
 
 # remove corrupted image files
 rt_path = f'{os.getcwd()}\\data\\dogs'
@@ -194,6 +194,34 @@ class Block(nn.Module):
         return self.transform(h)
 
 
+class SelfAttention(nn.Module):
+
+    def __init__(self, in_ch, size):
+        super().__init__()
+        self.channels = in_ch
+        self.size = size
+        self.attention = nn.MultiheadAttention(in_ch, 4, batch_first=True)
+        self.ln = nn.LayerNorm([in_ch])
+        self.seq = nn.Sequential(
+            nn.LayerNorm([in_ch]),
+            nn.Linear(in_ch, in_ch),
+            nn.GELU(),
+            nn.Linear(in_ch, in_ch))
+
+    def forward(self, x):
+
+        try:
+            x = x.view(-1, self.channels, self.size * self.size).swapaxes(1, 2)
+        except:
+            x = x.reshape(-1, self.channels, self.size * self.size).swapaxes(1, 2)
+        x_ln = self.ln(x)
+        attention_value, _ = self.attention(x_ln, x_ln, x_ln)
+        attention_value = attention_value + x
+        attention_value = self.seq(attention_value) + attention_value
+        return attention_value.swapaxes(2, 1).view(-1, self.channels, self.size, self.size)
+
+
+
 class SinusoidalPositionEmbeddings(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -217,10 +245,7 @@ class SimpleUnet(nn.Module):
 
     def __init__(self):
         super().__init__()
-        image_channels = 3
-        down_channels = (64, 128, 256, 512, 1024)
-        up_channels = (1024, 512, 256, 128, 64)
-        out_dim = 3
+
         time_emb_dim = 64
 
         # Time embedding
@@ -232,22 +257,36 @@ class SimpleUnet(nn.Module):
         )
 
         # Initial projection
-        self.conv0 = nn.Conv2d(image_channels, down_channels[0], 3, padding=1)
+        # check
+        self.conv0 = nn.Conv2d(3, 64, 3, padding=1)
 
+        self.down1 = Block(64, 128, time_emb_dim)
+        self.sa1 = SelfAttention(128, 32)
+        self.down2 = Block(128, 256, time_emb_dim)
+        self.sa2 = SelfAttention(256, 16)
+        self.down3 = Block(256, 512, time_emb_dim)
+        self.sa3 = SelfAttention(512, 8)
+        self.down4 = Block(512, 1024, time_emb_dim)
+        self.sa4 = SelfAttention(1024, 4)
 
-        # middle blocks
-        self.middle = nn.Conv2d(down_channels[-1], down_channels[-1], 3, padding=1)
+        self.conv1 = nn.Sequential(
+        nn.Conv2d(1024, 1024, 3, padding=1),
+        nn.GroupNorm(1, 1024),
+        nn.GELU(),
+        nn.Conv2d(1024, 1024, 3, padding=1),
+        nn.GroupNorm(1, 1024)
+        )
 
-        # Downsample
-        self.downs = nn.ModuleList([Block(down_channels[i], down_channels[i + 1], \
-                                          time_emb_dim) \
-                                    for i in range(len(down_channels) - 1)])
-        # Upsample
-        self.ups = nn.ModuleList([Block(up_channels[i], up_channels[i + 1], \
-                                        time_emb_dim, up=True) \
-                                  for i in range(len(up_channels) - 1)])
+        self.up1 = Block(1024, 512, time_emb_dim, up=True)
+        self.sa5 = SelfAttention(512, 8)
+        self.up2 = Block(512, 256, time_emb_dim, up=True)
+        self.sa6 = SelfAttention(256, 16)
+        self.up3 = Block(256, 128, time_emb_dim, up=True)
+        self.sa7 = SelfAttention(128, 32)
+        self.up4 = Block(128, 64, time_emb_dim, up=True)
+        self.sa8 = SelfAttention(64, 64)
 
-        self.output = nn.Conv2d(up_channels[-1], out_dim, 1)
+        self.output = nn.Conv2d(64, 3, 1)
 
     def forward(self, x, timestep):
         # Embedd time
@@ -255,20 +294,39 @@ class SimpleUnet(nn.Module):
         # Initial conv
         x = self.conv0(x)
         # Unet
-        residual_inputs = []
-        for down in self.downs:
-            x = down(x, t)
-            residual_inputs.append(x)
 
-        x = self.middle(x)
-        x = self.middle(x)
+        x1 = self.down1(x, t)
+        x1 = self.sa1(x1)
+        x2 = self.down2(x1, t)
+        x2 = self.sa2(x2)
+        x3 = self.down3(x2, t)
+        x3 = self.sa3(x3)
+        x4 = self.down4(x3, t)
+        x4 = self.sa4(x4)
 
-        for up in self.ups:
-            residual_x = residual_inputs.pop()
-            # Add residual x as additional channels
-            x = torch.cat((x, residual_x), dim=1)
-            x = up(x, t)
-        return self.output(x)
+
+        # x = self.conv1(x4)
+        x = x4
+
+        x = torch.cat((x, x4), dim=1)
+        x = self.up1(x, t)
+        x = self.sa5(x)
+
+        x = torch.cat((x, x3), dim=1)
+        x = self.up2(x, t)
+        x = self.sa6(x)
+
+        x = torch.cat((x, x2), dim=1)
+        x = self.up3(x, t)
+        x = self.sa7(x)
+
+        x = torch.cat((x, x1), dim=1)
+        x = self.up4(x, t)
+        x = self.sa8(x)
+
+        x = self.output(x)
+
+        return x
 
 def get_loss(model, x0, t, device='cuda'):
     x_noisy, noise = forward_diffusion_sample(x0, t, device)
@@ -303,7 +361,7 @@ def sample_plot_image(img_size, device, epoch):
 
     # disable displaying of plots
     plt.ioff()
-
+    model.eval()
     # sample noise
     img = torch.randn((1, 3, img_size, img_size), device=device)
     plt.figure(figsize=(15, 15))
@@ -384,9 +442,13 @@ for epoch in range(epoch_min_range, epoch_min_range+epochs):
             f.write(str(epoch))
 
         sample_plot_image(img_size, device, epoch)
+        model.train()
 
 
-# 1880
+
+
+# batch 16, with self attention 1 epoch duration is
+
 
 
 
