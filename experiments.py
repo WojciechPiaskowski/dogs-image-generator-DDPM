@@ -115,7 +115,7 @@ def forward_diffusion_sample(x0, t, device='cuda'):
 
 
 # beta scheduler
-T = 4000
+T = 1000
 # betas = linear_beta_schedule(timesteps=T)
 betas = cosine_beta_schedule(timesteps=T)
 
@@ -205,20 +205,21 @@ class SelfAttention(nn.Module):
         self.seq = nn.Sequential(
             nn.LayerNorm([in_ch]),
             nn.Linear(in_ch, in_ch),
-            nn.GELU(),
+            nn.ReLU(),
             nn.Linear(in_ch, in_ch))
 
     def forward(self, x):
-
-        try:
-            x = x.view(-1, self.channels, self.size * self.size).swapaxes(1, 2)
-        except:
-            x = x.reshape(-1, self.channels, self.size * self.size).swapaxes(1, 2)
+        # try:
+        #     x = x.view(-1, self.channels, self.size * self.size).swapaxes(1, 2)
+        # except:
+        #     x = x.reshape(-1, self.channels, self.size * self.size).swapaxes(1, 2)
+        x = x.view(-1, self.channels, self.size * self.size).swapaxes(1, 2)
         x_ln = self.ln(x)
         attention_value, _ = self.attention(x_ln, x_ln, x_ln)
         attention_value = attention_value + x
         attention_value = self.seq(attention_value) + attention_value
-        return attention_value.swapaxes(2, 1).view(-1, self.channels, self.size, self.size)
+        out = attention_value.swapaxes(2, 1).view(-1, self.channels, self.size, self.size)
+        return out
 
 
 
@@ -246,14 +247,14 @@ class SimpleUnet(nn.Module):
     def __init__(self):
         super().__init__()
 
-        time_emb_dim = 64
+        time_emb_dim = 256
 
         # Time embedding
         self.time_mlp = nn.Sequential(
             SinusoidalPositionEmbeddings(time_emb_dim),
             nn.SiLU(),
             nn.Linear(time_emb_dim, time_emb_dim),
-            # nn.ReLU()
+            nn.ReLU()
         )
 
         # Initial projection
@@ -266,25 +267,24 @@ class SimpleUnet(nn.Module):
         self.sa2 = SelfAttention(256, 16)
         self.down3 = Block(256, 512, time_emb_dim)
         self.sa3 = SelfAttention(512, 8)
-        self.down4 = Block(512, 1024, time_emb_dim)
-        self.sa4 = SelfAttention(1024, 4)
 
         self.conv1 = nn.Sequential(
-        nn.Conv2d(1024, 1024, 3, padding=1),
-        nn.GroupNorm(1, 1024),
-        nn.GELU(),
-        nn.Conv2d(1024, 1024, 3, padding=1),
-        nn.GroupNorm(1, 1024)
+        nn.Conv2d(512, 512, 3, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(512, 256, 3, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(256, 256, 3, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(256, 512, 3, padding=1),
+        nn.GroupNorm(1, 512)
         )
 
-        self.up1 = Block(1024, 512, time_emb_dim, up=True)
-        self.sa5 = SelfAttention(512, 8)
-        self.up2 = Block(512, 256, time_emb_dim, up=True)
-        self.sa6 = SelfAttention(256, 16)
-        self.up3 = Block(256, 128, time_emb_dim, up=True)
-        self.sa7 = SelfAttention(128, 32)
-        self.up4 = Block(128, 64, time_emb_dim, up=True)
-        self.sa8 = SelfAttention(64, 64)
+        self.up1 = Block(512, 256, time_emb_dim, up=True)
+        self.sa4 = SelfAttention(256, 16)
+        self.up2 = Block(256, 128, time_emb_dim, up=True)
+        self.sa5 = SelfAttention(128, 32)
+        self.up3 = Block(128, 64, time_emb_dim, up=True)
+        self.sa6 = SelfAttention(64, 64)
 
         self.output = nn.Conv2d(64, 3, 1)
 
@@ -301,28 +301,21 @@ class SimpleUnet(nn.Module):
         x2 = self.sa2(x2)
         x3 = self.down3(x2, t)
         x3 = self.sa3(x3)
-        x4 = self.down4(x3, t)
-        x4 = self.sa4(x4)
 
-
-        # x = self.conv1(x4)
-        x = x4
-
-        x = torch.cat((x, x4), dim=1)
-        x = self.up1(x, t)
-        x = self.sa5(x)
+        x = self.conv1(x3)
 
         x = torch.cat((x, x3), dim=1)
-        x = self.up2(x, t)
-        x = self.sa6(x)
+        x = self.up1(x, t)
+        x = self.sa4(x)
 
         x = torch.cat((x, x2), dim=1)
-        x = self.up3(x, t)
-        x = self.sa7(x)
+        x = self.up2(x, t)
+        x = self.sa5(x)
 
         x = torch.cat((x, x1), dim=1)
-        x = self.up4(x, t)
-        x = self.sa8(x)
+        x = self.up3(x, t)
+        # x = self.sa6(x)
+
 
         x = self.output(x)
 
@@ -447,7 +440,8 @@ for epoch in range(epoch_min_range, epoch_min_range+epochs):
 
 
 
-# batch 16, with self attention 1 epoch duration is
+# batch 16, with self attention 1 epoch duration is 4h
+# batch 32, with self attention, no gelu is
 
 
 
