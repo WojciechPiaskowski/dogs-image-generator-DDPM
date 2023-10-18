@@ -200,7 +200,7 @@ class SelfAttention(nn.Module):
         super().__init__()
         self.channels = in_ch
         self.size = size
-        self.attention = nn.MultiheadAttention(in_ch, 4, batch_first=True)
+        self.attention = nn.MultiheadAttention(in_ch, 8, batch_first=True)
         self.ln = nn.LayerNorm([in_ch])
         self.seq = nn.Sequential(
             nn.LayerNorm([in_ch]),
@@ -440,8 +440,8 @@ for epoch in range(epoch_min_range, epoch_min_range+epochs):
 
 
 
-# batch 16, with self attention 1 epoch duration is 4h
-# batch 32, with self attention, no gelu is
+# increasing SA heads from 4 to 8 didnt change much
+# adding last SA layer completely brakes compute time
 
 
 
