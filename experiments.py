@@ -98,7 +98,6 @@ def get_index_from_list(vals, t, x_shape):
     return out
 
 
-# TODO: understand what this is used for
 # takes an image and a timestep, retuns noisy image (and noise itself) at that timestep
 def forward_diffusion_sample(x0, t, device='cuda'):
     noise = torch.randn_like(x0)
@@ -200,7 +199,7 @@ class SelfAttention(nn.Module):
         super().__init__()
         self.channels = in_ch
         self.size = size
-        self.attention = nn.MultiheadAttention(in_ch, 8, batch_first=True)
+        self.attention = nn.MultiheadAttention(in_ch, 4, batch_first=True)
         self.ln = nn.LayerNorm([in_ch])
         self.seq = nn.Sequential(
             nn.LayerNorm([in_ch]),
@@ -267,24 +266,28 @@ class SimpleUnet(nn.Module):
         self.sa2 = SelfAttention(256, 16)
         self.down3 = Block(256, 512, time_emb_dim)
         self.sa3 = SelfAttention(512, 8)
+        self.down4 = Block(512, 1024, time_emb_dim)
+        self.sa4 = SelfAttention(1024, 4)
 
         self.conv1 = nn.Sequential(
+        nn.Conv2d(1024, 1024, 3, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(1024, 512, 3, padding=1),
+        nn.ReLU(),
         nn.Conv2d(512, 512, 3, padding=1),
         nn.ReLU(),
-        nn.Conv2d(512, 256, 3, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(256, 256, 3, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(256, 512, 3, padding=1),
-        nn.GroupNorm(1, 512)
+        nn.Conv2d(512, 1024, 3, padding=1),
+        nn.GroupNorm(1, 1024)
         )
 
-        self.up1 = Block(512, 256, time_emb_dim, up=True)
-        self.sa4 = SelfAttention(256, 16)
-        self.up2 = Block(256, 128, time_emb_dim, up=True)
-        self.sa5 = SelfAttention(128, 32)
-        self.up3 = Block(128, 64, time_emb_dim, up=True)
-        self.sa6 = SelfAttention(64, 64)
+        self.up1 = Block(1024, 512, time_emb_dim, up=True)
+        self.sa5 = SelfAttention(512, 8)
+        self.up2 = Block(512, 256, time_emb_dim, up=True)
+        self.sa6 = SelfAttention(256, 16)
+        self.up3 = Block(256, 128, time_emb_dim, up=True)
+        self.sa7 = SelfAttention(128, 32)
+        self.up4 = Block(128, 64, time_emb_dim, up=True)
+        self.sa8 = SelfAttention(64, 64)
 
         self.output = nn.Conv2d(64, 3, 1)
 
@@ -301,21 +304,26 @@ class SimpleUnet(nn.Module):
         x2 = self.sa2(x2)
         x3 = self.down3(x2, t)
         x3 = self.sa3(x3)
+        x4 = self.down4(x3, t)
+        x4 = self.sa4(x4)
 
-        x = self.conv1(x3)
+        x = self.conv1(x4)
 
-        x = torch.cat((x, x3), dim=1)
+        x = torch.cat((x, x4), dim=1)
         x = self.up1(x, t)
-        x = self.sa4(x)
-
-        x = torch.cat((x, x2), dim=1)
-        x = self.up2(x, t)
         x = self.sa5(x)
 
-        x = torch.cat((x, x1), dim=1)
-        x = self.up3(x, t)
-        # x = self.sa6(x)
+        x = torch.cat((x, x3), dim=1)
+        x = self.up2(x, t)
+        x = self.sa6(x)
 
+        x = torch.cat((x, x2), dim=1)
+        x = self.up3(x, t)
+        x = self.sa7(x)
+
+        x = torch.cat((x, x1), dim=1)
+        x = self.up4(x, t)
+        # x = self.sa8(x)
 
         x = self.output(x)
 
@@ -327,7 +335,12 @@ def get_loss(model, x0, t, device='cuda'):
     noise_pred = model(x_noisy, t)
 
     # TODO check L1 loss
-    return F.l1_loss(noise, noise_pred)
+    # l1_loss = F.l1_loss(noise, noise_pred)
+    # loss = l1_loss(noise, noise_pred)
+    mse = nn.MSELoss()
+    loss = mse(noise, noise_pred)
+
+    return loss
 
 
 # uses the model to predict the noise, next denoise the image
@@ -404,7 +417,7 @@ if path_exist:
 else:
     epoch_min_range = 0
 
-opt = Adam(model.parameters(), lr=0.0001)
+opt = Adam(model.parameters(), lr=0.0003)
 epochs = 1000
 
 for epoch in range(epoch_min_range, epoch_min_range+epochs):
@@ -429,7 +442,7 @@ for epoch in range(epoch_min_range, epoch_min_range+epochs):
     print(f'epoch: {epoch}, loss: {np.mean(losses):.4f}'
           f' time: {elapsed/60:.1f} minutes')
 
-    if epoch % 10 == 0:
+    if epoch % 5 == 0:
         torch.save(model.state_dict(), 'model_state.pth')
         with open('epoch.txt', 'w') as f:
             f.write(str(epoch))
