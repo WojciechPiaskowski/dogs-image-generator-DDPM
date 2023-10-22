@@ -115,11 +115,12 @@ def forward_diffusion_sample(x0, t, device='cuda'):
 
 # beta scheduler
 T = 1000
-# betas = linear_beta_schedule(timesteps=T)
-betas = cosine_beta_schedule(timesteps=T)
+betas = linear_beta_schedule(timesteps=T)
+# betas = cosine_beta_schedule(timesteps=T)
 
 # pre-calculate terms, alphas cumulative produts
 alphas = 1.0 - betas
+alphas_prev = F.pad(alphas[:-1], (1, 0), value=1.0)
 alphas_cumprod = torch.cumprod(alphas, axis=0)
 alphas_cumprod_prev = F.pad(alphas_cumprod[:-1], (1, 0), value=1.0)
 sqrt_recip_alphas = torch.sqrt(1.0 / alphas)
@@ -161,6 +162,75 @@ def display_forward_diffusion(device='cuda'):
 # positional embeddings are used for the step in the sequence information (t)
 # U-Net needs to predict the noise and subtract it from the image (to get image at noise step t-1)
 
+
+class DoubleConv(nn.Module):
+    def __init__(self, in_channels, out_channels, mid_channels=None, residual=False):
+        super().__init__()
+        self.residual = residual
+        if not mid_channels:
+            mid_channels = out_channels
+        self.double_conv = nn.Sequential(
+            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
+            nn.GroupNorm(1, mid_channels),
+            nn.GELU(),
+            nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.GroupNorm(1, out_channels),
+        )
+
+    def forward(self, x):
+        if self.residual:
+            return F.gelu(x + self.double_conv(x))
+        else:
+            return self.double_conv(x)
+
+
+class Down(nn.Module):
+    def __init__(self, in_channels, out_channels, emb_dim=256):
+        super().__init__()
+        self.maxpool_conv = nn.Sequential(
+            nn.MaxPool2d(2),
+            DoubleConv(in_channels, in_channels, residual=True),
+            DoubleConv(in_channels, out_channels),
+        )
+
+        self.emb_layer = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(
+                emb_dim,
+                out_channels
+            ),
+        )
+
+    def forward(self, x, t):
+        x = self.maxpool_conv(x)
+        emb = self.emb_layer(t)[:, :, None, None].repeat(1, 1, x.shape[-2], x.shape[-1])
+        return x + emb
+
+
+class Up(nn.Module):
+    def __init__(self, in_channels, out_channels, emb_dim=256):
+        super().__init__()
+
+        self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+        self.conv = nn.Sequential(
+            DoubleConv(in_channels, in_channels, residual=True),
+            DoubleConv(in_channels, out_channels, in_channels // 2),
+        )
+
+        self.emb_layer = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(
+                emb_dim,
+                out_channels
+            ),
+        )
+
+    def forward(self, x, skip_x, t):
+        x = self.up(x)
+        x = torch.cat([skip_x, x], dim=1)
+        x = self.conv(x)
+        emb = self.emb_layer(t)[:, :, None, None].repeat(1, 1, x.shape[-2], x.shape[-1])
+        return x + emb
 
 # upsaling downsampling convolutions?
 class Block(nn.Module):
@@ -204,7 +274,7 @@ class SelfAttention(nn.Module):
         self.seq = nn.Sequential(
             nn.LayerNorm([in_ch]),
             nn.Linear(in_ch, in_ch),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(in_ch, in_ch))
 
     def forward(self, x):
@@ -246,59 +316,71 @@ class SimpleUnet(nn.Module):
     def __init__(self):
         super().__init__()
 
-        time_emb_dim = 256
+        self.time_emb_dim = 256
+        self.device = 'cuda'
 
         # Time embedding
         self.time_mlp = nn.Sequential(
-            SinusoidalPositionEmbeddings(time_emb_dim),
+            SinusoidalPositionEmbeddings(self.time_emb_dim),
             nn.SiLU(),
-            nn.Linear(time_emb_dim, time_emb_dim),
+            nn.Linear(self.time_emb_dim, self.time_emb_dim),
             nn.ReLU()
         )
 
         # Initial projection
         # check
-        self.conv0 = nn.Conv2d(3, 64, 3, padding=1)
+        self.conv0 = DoubleConv(3, 64)
 
-        self.down1 = Block(64, 128, time_emb_dim)
+        self.down1 = Down(64, 128)
         self.sa1 = SelfAttention(128, 32)
-        self.down2 = Block(128, 256, time_emb_dim)
+        self.down2 = Down(128, 256)
         self.sa2 = SelfAttention(256, 16)
-        self.down3 = Block(256, 512, time_emb_dim)
+        self.down3 = Down(256, 512)
         self.sa3 = SelfAttention(512, 8)
-        self.down4 = Block(512, 1024, time_emb_dim)
-        self.sa4 = SelfAttention(1024, 4)
+        self.down4 = Down(512, 512)
+        self.sa4 = SelfAttention(512, 4)
 
         self.conv1 = nn.Sequential(
-        nn.Conv2d(1024, 1024, 3, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(1024, 512, 3, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(512, 512, 3, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(512, 1024, 3, padding=1),
-        nn.GroupNorm(1, 1024)
+            DoubleConv(512, 1024),
+            DoubleConv(1024, 1024),
+            DoubleConv(1024, 512)
         )
 
-        self.up1 = Block(1024, 512, time_emb_dim, up=True)
-        self.sa5 = SelfAttention(512, 8)
-        self.up2 = Block(512, 256, time_emb_dim, up=True)
-        self.sa6 = SelfAttention(256, 16)
-        self.up3 = Block(256, 128, time_emb_dim, up=True)
-        self.sa7 = SelfAttention(128, 32)
-        self.up4 = Block(128, 64, time_emb_dim, up=True)
+        self.up1 = Up(1024, 256)
+        self.sa5 = SelfAttention(256, 8)
+        self.up2 = Up(512, 128)
+        self.sa6 = SelfAttention(128, 16)
+        self.up3 = Up(256, 64)
+        self.sa7 = SelfAttention(64, 32)
+        self.up4 = Up(128, 64)
         self.sa8 = SelfAttention(64, 64)
 
         self.output = nn.Conv2d(64, 3, 1)
 
+
+    def pos_encoding(self, t, channels):
+        inv_freq = 1.0 / (
+            10000
+            ** (torch.arange(0, channels, 2, device=self.device).float() / channels)
+        )
+        pos_enc_a = torch.sin(t.repeat(1, channels // 2) * inv_freq)
+        pos_enc_b = torch.cos(t.repeat(1, channels // 2) * inv_freq)
+        pos_enc = torch.cat([pos_enc_a, pos_enc_b], dim=-1)
+        return pos_enc
+
+
     def forward(self, x, timestep):
+
         # Embedd time
-        t = self.time_mlp(timestep)
+        # t = self.time_mlp(timestep)
+        t = timestep.unsqueeze(-1).type(torch.float)
+        t = self.pos_encoding(t, self.time_emb_dim)
+
         # Initial conv
-        x = self.conv0(x)
+        x0 = self.conv0(x)
         # Unet
 
-        x1 = self.down1(x, t)
+        x1 = self.down1(x0, t)
         x1 = self.sa1(x1)
         x2 = self.down2(x1, t)
         x2 = self.sa2(x2)
@@ -309,20 +391,16 @@ class SimpleUnet(nn.Module):
 
         x = self.conv1(x4)
 
-        x = torch.cat((x, x4), dim=1)
-        x = self.up1(x, t)
+        x = self.up1(x, x3, t)
         x = self.sa5(x)
 
-        x = torch.cat((x, x3), dim=1)
-        x = self.up2(x, t)
+        x = self.up2(x, x2, t)
         x = self.sa6(x)
 
-        x = torch.cat((x, x2), dim=1)
-        x = self.up3(x, t)
+        x = self.up3(x, x1, t)
         x = self.sa7(x)
 
-        x = torch.cat((x, x1), dim=1)
-        x = self.up4(x, t)
+        x = self.up4(x, x0, t)
         # x = self.sa8(x)
 
         x = self.output(x)
@@ -347,8 +425,10 @@ def get_loss(model, x0, t, device='cuda'):
 # applies noise to this image, if not in the last step
 @torch.no_grad()
 def sample_timestep(x, t):
+    model.eval()
     betas_t = get_index_from_list(betas, t, x.shape)
     sqrt_one_minus_alphas_cumprod_t = get_index_from_list(sqrt_one_minus_alphas_cumprod, t, x.shape)
+    # sqrt(1/alpha)
     sqrt_recip_alphas_t = get_index_from_list(sqrt_recip_alphas, t, x.shape)
 
     # call model
@@ -356,10 +436,23 @@ def sample_timestep(x, t):
     posterior_variance_t = get_index_from_list(posterior_variance, t, x.shape)
 
     if t == 0:
-        return model_mean
+        noise = torch.zeros_like(x)
     else:
         noise = torch.randn_like(x)
-        return model_mean + torch.sqrt(posterior_variance_t) * noise
+
+    # out = model_mean + torch.sqrt(posterior_variance_t) * noise
+
+    alpha_t = get_index_from_list(alphas, t, x.shape)
+    out = 1 / torch.sqrt(alpha_t) * (x - ((1 - alpha_t) / sqrt_one_minus_alphas_cumprod_t) * model(x, t)) + torch.sqrt(betas_t) * noise
+
+    # reddit fix
+    # alpha_prev = get_index_from_list(alphas_prev, t, x.shape)
+    # x0 = (x - sqrt_one_minus_alphas_cumprod_t * model(x, t)) / torch.sqrt(alpha_t)
+    # out = torch.sqrt(alpha_prev) * x0 + torch.sqrt(posterior_variance_t) * noise
+
+    model.train()
+
+    return out
 
 
 @torch.no_grad()
@@ -367,7 +460,6 @@ def sample_plot_image(img_size, device, epoch):
 
     # disable displaying of plots
     plt.ioff()
-    model.eval()
     # sample noise
     img = torch.randn((1, 3, img_size, img_size), device=device)
     plt.figure(figsize=(15, 15))
@@ -377,18 +469,18 @@ def sample_plot_image(img_size, device, epoch):
 
     idx = 1
     for i in range(0, T)[::-1]:
-
         t = torch.full((1,), i, device=device, dtype=torch.long)
+        img = torch.clamp(img, -1, 1)
         img = sample_timestep(img, t) 
 
-        img = torch.clamp(img, -1.0, 1.0)
         if i % step == 0:
             plt.subplot(2, int(n_images/2), idx)
             img_show = img.detach().cpu()
+            img_show = torch.clamp(img_show, -1.0, 1.0)
             img_show = (img_show + 1) / 2
+            img_show = (img_show * 255).type(torch.uint8)
             img_show = img_show[0].permute(1, 2, 0)
-            img_show = img_show * 255
-            img_show = img_show.numpy().astype(np.uint8)
+            img_show = img_show.cpu().numpy()
             plt.imshow(img_show)
             idx += 1
 
@@ -448,18 +540,15 @@ for epoch in range(epoch_min_range, epoch_min_range+epochs):
             f.write(str(epoch))
 
         sample_plot_image(img_size, device, epoch)
-        model.train()
-
-
 
 
 # increasing SA heads from 4 to 8 didnt change much
 # adding last SA layer completely brakes compute time
 
+# changes since commit:
+# relu -> gelu in self attention
+# time embeddings changed
+# beta scheduler back to linear
+# changed sampling
 
-
-
-
-
-
-
+# output of the model is huuuuge
