@@ -412,9 +412,8 @@ def get_loss(model, x0, t, device='cuda'):
     x_noisy = torch.clamp(x_noisy, -1.0, 1.0)
     noise_pred = model(x_noisy, t)
 
-    # TODO check L1 loss
-    # l1_loss = F.l1_loss(noise, noise_pred)
-    # loss = l1_loss(noise, noise_pred)
+    # loss = F.l1_loss(noise, noise_pred)
+
     mse = nn.MSELoss()
     loss = mse(noise, noise_pred)
 
@@ -464,25 +463,27 @@ def sample_plot_image(img_size, device, epoch):
     img = torch.randn((1, 3, img_size, img_size), device=device)
     plt.figure(figsize=(15, 15))
     plt.axis('off')
-    n_images = 20
+    n_images = 10
     step = int(T / n_images)
 
     idx = 1
-    for i in range(0, T)[::-1]:
-        t = torch.full((1,), i, device=device, dtype=torch.long)
-        img = torch.clamp(img, -1, 1)
-        img = sample_timestep(img, t) 
+    for j in range(n_images):
+        for i in range(0, T)[::-1]:
+            t = torch.full((1,), i, device=device, dtype=torch.long)
+            img = torch.clamp(img, -1, 1)
+            img = sample_timestep(img, t)
 
-        if i % step == 0:
-            plt.subplot(2, int(n_images/2), idx)
-            img_show = img.detach().cpu()
-            img_show = torch.clamp(img_show, -1.0, 1.0)
-            img_show = (img_show + 1) / 2
-            img_show = (img_show * 255).type(torch.uint8)
-            img_show = img_show[0].permute(1, 2, 0)
-            img_show = img_show.cpu().numpy()
-            plt.imshow(img_show)
-            idx += 1
+
+        plt.subplot(2, int(n_images/2), idx)
+        img_show = img.detach().cpu()
+        img_show = torch.clamp(img_show, -1.0, 1.0)
+        img_show = (img_show + 1) / 2
+        img_show = (img_show * 255).type(torch.uint8)
+        img_show = img_show[0].permute(1, 2, 0)
+        img_show = img_show.cpu().numpy()
+
+        plt.imshow(img_show)
+        idx += 1
 
     plt.savefig(f'samples/epoch_{epoch}.png')
     plt.close('all')
@@ -534,7 +535,7 @@ for epoch in range(epoch_min_range, epoch_min_range+epochs):
     print(f'epoch: {epoch}, loss: {np.mean(losses):.4f}'
           f' time: {elapsed/60:.1f} minutes')
 
-    if epoch % 5 == 0:
+    if epoch % 10 == 0:
         torch.save(model.state_dict(), 'model_state.pth')
         with open('epoch.txt', 'w') as f:
             f.write(str(epoch))
