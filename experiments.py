@@ -6,14 +6,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import Adam
 from torchvision.transforms import transforms
-from torchvision.transforms.functional import adjust_brightness
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
 from matplotlib import pyplot as plt
 from PIL import Image
 import os
 
-
+# parameters
 img_size = 64
 batch_size = 16
 
@@ -22,13 +21,12 @@ rt_path = f'{os.getcwd()}\\data\\dogs'
 for subdir, dirs, files in os.walk(rt_path):
     for file in files:
         path = os.path.join(subdir, file)
-
         try:
             img = Image.open(path)
         except:
             os.remove(path)
 
-
+# create dataloader object from images in folders, transform them
 def load_transformed_dataset(path, img_size=img_size, batch_size=batch_size):
     data_transforms = [
         transforms.Resize((img_size, img_size)),
@@ -44,7 +42,7 @@ def load_transformed_dataset(path, img_size=img_size, batch_size=batch_size):
 
     return dl
 
-
+# function to display images
 def show_images(dl, num_samples=20, cols=4, display=False, save=False, title=''):
 
     if not display:
@@ -67,7 +65,10 @@ def show_images(dl, num_samples=20, cols=4, display=False, save=False, title='')
 
     return
 
+# load the images to dataloader
 dl = load_transformed_dataset(path='data/dogs')
+
+# show sample images
 # show_images(dl, display=True, save=False, title='sample_images')
 
 # forward process - adding noise / noise scheduler
@@ -89,16 +90,15 @@ def linear_beta_schedule(timesteps):
 
 
 # returns an index t of list given the batch dimension
-# TODO: undesrtand what this is used for
+# retrieves the value at speciffic timestep
 def get_index_from_list(vals, t, x_shape):
     batch_size = t.shape[0]
     out = vals.gather(-1, t.cpu())
     out = out.reshape(batch_size, *((1,) * (len(x_shape) - 1))).to('cuda')
-
     return out
 
 
-# takes an image and a timestep, retuns noisy image (and noise itself) at that timestep
+# takes an image and a timestep, returns noisy image (and noise itself) at that timestep
 def forward_diffusion_sample(x0, t, device='cuda'):
     noise = torch.randn_like(x0)
     sqrt_alphas_cumprod_t = get_index_from_list(sqrt_alphas_cumprod, t, x0.shape)
@@ -112,13 +112,13 @@ def forward_diffusion_sample(x0, t, device='cuda'):
 
     return noisy_img, noise
 
-
 # beta scheduler
 T = 1000
 betas = linear_beta_schedule(timesteps=T)
 # betas = cosine_beta_schedule(timesteps=T)
 
-# pre-calculate terms, alphas cumulative produts
+# pre-calculates values used to get noisy image at specific timestep (cumulated product of alpha)
+# as well as other values used for prediction
 alphas = 1.0 - betas
 alphas_prev = F.pad(alphas[:-1], (1, 0), value=1.0)
 alphas_cumprod = torch.cumprod(alphas, axis=0)
