@@ -9,39 +9,10 @@ import time
 import os
 import pandas as pd
 
-# def timeout(seconds, action=None):
-#     """Calls any function with timeout after 'seconds'.
-#        If a timeout occurs, 'action' will be returned or called if
-#        it is a function-like object.
-#     """
-#     def handler(queue, func, args, kwargs):
-#         queue.put(func(*args, **kwargs))
-#
-#     def decorator(func):
-#
-#         def wraps(*args, **kwargs):
-#             q = Queue()
-#             p = Process(target=handler, args=(q, func, args, kwargs))
-#             p.start()
-#             p.join(timeout=seconds)
-#             if p.is_alive():
-#                 p.terminate()
-#                 p.join()
-#                 if hasattr(action, '__call__'):
-#                     return action()
-#                 else:
-#                     return action
-#             else:
-#                 return q.get()
-#
-#         return wraps
-#
-#     return decorator
-
-
 
 # function to create or load (if exists) df with download status
 def load_create_status():
+
     try:
         df = pd.read_csv(os.getcwd() + '\\data\\download_status.csv')
 
@@ -86,6 +57,7 @@ def load_create_status():
 
 # function that scrolls to bottom of image search, clicking on 'show more results' if needed
 def scroll_to_bottom(wd):
+
     last_height = wd.execute_script('return document.body.scrollHeight')
 
     while True:
@@ -114,6 +86,7 @@ def scroll_to_bottom(wd):
 
 # look for images and get image links
 def get_google_images(delay, search_label):
+
     wd = webdriver.Chrome()
     wd.get('https://www.google.com/imghp?hl=en')
 
@@ -157,6 +130,7 @@ def get_google_images(delay, search_label):
 
 # @timeout(60)
 def download_image(path, url, file_name):
+
     wd = webdriver.Chrome()
 
     try:
@@ -180,7 +154,6 @@ def download_image(path, url, file_name):
 df = load_create_status()
 search_labels = list(df[df['downloaded'] == 0]['breed'])
 
-
 for breed in search_labels:
 
     # setup path
@@ -199,10 +172,8 @@ for breed in search_labels:
         download_image(path, url, f'{breed.replace(" ", "_")}_{i}')
 
         print(
-            f'downloaded image #{i} in {time.time() - st_local:.1f} s, total time {(time.time() - st_global) / 60:.2f} min')
+            f'downloaded image #{i} in {time.time() - st_local:.1f} s, total time {(time.time() - st_global) / 60:.2f}'
+            f' min')
 
     df.iloc[df[df['breed'] == breed].index, 1] = 1
     df.to_csv(os.getcwd() + '\\data\\download_status.csv', index=False)
-
-
-
