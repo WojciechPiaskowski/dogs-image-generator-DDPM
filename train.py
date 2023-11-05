@@ -2,6 +2,7 @@
 import argparse
 import copy
 import time
+import math
 import numpy as np
 import torch
 import torch.nn as nn
@@ -158,8 +159,8 @@ if __name__ == '__main__':
         plt.axis('off')
 
         idx = 1
-        rows = int(n_images / 10) + 1
-        cols = int(n_images / rows) + 1
+        rows = int(1 if (n_images/10) <= 1 else math.ceil((n_images/10)))
+        cols = 10
 
         fig = plt.figure(figsize=(15, 15))
         for j in range(n_images):
