@@ -94,7 +94,7 @@ class Up(nn.Module):
 
 
 # self attention layer
-# utilizes transformer's self-attention where query, key and value are all logarithms of the input
+# utilizes transformer's self-attention where query, key and value are all normalized copies of the input
 class SelfAttention(nn.Module):
 
     def __init__(self, in_ch, size):
