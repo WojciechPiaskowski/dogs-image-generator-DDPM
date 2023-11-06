@@ -50,10 +50,10 @@ The model uses the **UNet** architecture that consists of **downsample**, **upsa
 The model's inputs are **processed dog images** and **timestep embeddings**.
 
 **Image processing** includes:
-- resizing them to 64x64 pixels
-- random horizontal flip
-- scaling the pixel values to [-1, 1]
-- loading images from folders to a pytorch DataLoader
+- Resizing them to 64x64 pixels
+- Random horizontal flip
+- Scaling the pixel values to [-1, 1]
+- Loading images from folders to a pytorch DataLoader
 
 **Timestep embedding** uses sinus and cosine functions to map integer timestep values (0 to T, in this case, 0 to 1000) to a continuous space with specified embedding size (in this case 256).
 This timestep embedding is later passed within downsample and umpsample layers.
@@ -96,17 +96,21 @@ This however did not bring improvements to the model output.
 
 # Results
 
-**samples generated from linear beta scheduler trained model**
+**Samples generated from linear beta scheduler trained model**
+Images such as the last 3 in the firs row come from scrapped dataset having collages of dogs such as the one displayed in **possible improvements** section.
 ![v4_1](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/c45fff77-f5f5-4bd2-8655-a5aaef81d860)
 ![v4_2](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/d5e69da5-86ec-4977-b8d6-afc3b62e03ef)
 
-**samples generated from cosine beta scheduler trained model**
+**Samples generated from cosine beta scheduler trained model**
 ![ema_epoch_370v5_ema](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/dc057238-8bd8-4dcd-8e86-962007d0e478)
 ![epoch_470v5](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/ff22a0eb-9012-4124-bce7-51dbd7014454)
 
 # Possible improvements
 
-- delete unnecessary images -> many images in the scrapped dataset contain a collage of dogs, which results in the model generating a lot of very small dogs in an image, which in many cases is hard to even see in 64x64 resolution
+- Delete unnecessary images -> many images in the scrapped dataset contain a collage of dogs, which results in the model generating a lot of very small dogs in an image, which in many cases is hard to even see in 64x64 resolution
+Example collage:
+![beagles_dog_pictures_116](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/6569f0c6-13d2-48cc-9274-fe85bce4da74)
+
 - Classifier guidance -> add classes so the model learns to generate specific types of dogs
-- larger model -> larger model, more compute
-- more images -> larger dataset could improve the results
+- Larger model -> larger model, more compute
+- More images -> larger dataset could improve the results
