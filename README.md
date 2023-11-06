@@ -80,10 +80,12 @@ Query, Key and Value are all normalized copies of the input to the 4-head attent
 # Final structure
 The network consists of:
 - 2 convolution layers
-- 4 downsample blocks
+- 4 downsample blocks*
 - 6 middle convolution layers
-- 4 upsample blocks
+- 4 upsample blocks*
 - output layer - output shape is batch_size x 64 x 64 x 3
+
+- Self-attention layer after every upsample and downsample block, excluding the last upsample block
 
 The model consists of 93 417 859 parameters.
 
