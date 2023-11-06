@@ -72,7 +72,7 @@ Additionally the upsampling blocks use **residual connections**, which prove to 
 
 Otherwise, upsampling blocks use the same convolution layers, normalization and linear embedding processing that is later added to the convolution output.
 
-# Self-attention blocks
+# Self-attention block
 Self-attention layers are typically useful for building context between inputs. In this case, they were added experimentally, and in the end improved the output significantly.
 
 Query, Key and Value are all normalized copies of the input to the 4-head attention layer. That is later passed through 2 linear layers mixed with layer normalization and GELU activation function.
