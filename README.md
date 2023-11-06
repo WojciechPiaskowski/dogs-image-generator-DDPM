@@ -109,7 +109,7 @@ Images such as the last 3 in the firs row come from scrapped dataset having coll
 
 - Delete unnecessary images -> many images in the scrapped dataset contain a collage of dogs, which results in the model generating a lot of very small dogs in an image, which in many cases is hard to even see in 64x64 resolution
 Example collage:
-![beagles_dog_pictures_116](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/6569f0c6-13d2-48cc-9274-fe85bce4da74)
+![beagles_dog_pictures_116](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/258442be-69eb-4a82-9edf-d79475528488)
 
 - Classifier guidance -> add classes so the model learns to generate specific types of dogs
 - Larger model -> larger model, more compute
