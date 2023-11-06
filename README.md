@@ -97,12 +97,12 @@ This however did not bring improvements to the model output.
 # Results
 
 **samples generated from linear beta scheduler trained model**
-![epoch_490v4](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/272513e3-b471-4d5a-89ce-3d6056dc91e6)
-![epoch_540v4](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/a9dd4261-ad76-4d49-8aaf-bb4fe17d9ade)
+![v4_1](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/c45fff77-f5f5-4bd2-8655-a5aaef81d860)
+![v4_2](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/d5e69da5-86ec-4977-b8d6-afc3b62e03ef)
 
 **samples generated from cosine beta scheduler trained model**
-![ema_epoch_370v5_ema](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/18151502-450e-4699-8150-38d3db8babe6)
-![epoch_470v5](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/fe6ebcf5-30aa-44a9-84d2-b59156e5c059)
+![ema_epoch_370v5_ema](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/dc057238-8bd8-4dcd-8e86-962007d0e478)
+![epoch_470v5](https://github.com/WojciechPiaskowski/dogs-image-generator-DDPM/assets/57685224/ff22a0eb-9012-4124-bce7-51dbd7014454)
 
 # Possible improvements
 
